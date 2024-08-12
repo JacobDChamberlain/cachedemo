@@ -20,29 +20,32 @@ redisClient.on('error', (err) => {
     console.error('Redis error: ', err);
 });
 
+redisClient.on('connect', () => {
+    console.log('Connected to Redis');
+});
+
+redisClient.connect();
 
 app.get('/users', async (req, res) => {
     try {
         // Check Redis cache first:
-        redisClient.get('users', async (err, users) => {
-            if (err) throw err;
+        const cachedUsers =  await redisClient.get('users')
 
-            if (users) {
-                console.log('Cache hit');
-                return res.json(JSON.parse(users));
-            } else {
-                console.log('Cache miss');
+        if (cachedUsers) {
+            console.log('Cache hit!!!');
+            return res.json(JSON.parse(cachedUsers));
+        } else {
+            console.log('Cache miss :\'(');
 
-                // Fetch from PostgreSQL DB
-                const result = await pool.query('SELECT * FROM users');
-                const users = result.rows;
+            // Fetch from Postgres DB
+            const result = await pool.query('Select * FROM users');
+            const users = await result.rows;
 
-                // Store in Redis
-                redisClient.setEx('users', 3600, JSON.stringify(users));
+            // Store in Redis w/ expiration time of 3600 sec (1 hr)
+            await redisClient.setEx('users', 3600, JSON.stringify(users));
 
-                return res.json(users);
-            }
-        });
+            return res.json(users);
+        }
     } catch (err) {
         console.error(err);
         res.status(500).send('Server Error');
